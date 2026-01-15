@@ -7,6 +7,7 @@ import numpy as np
 
 from uwb_sim.estimation.multilateration import wls_gauss_newton_2d
 from uwb_sim.metrics.accuracy import compute_position_errors, summarize_errors, AccuracyMetrics
+from uwb_sim.metrics.profiler import Timer, TimerStats
 from uwb_sim.simulation.measurement import simulate_ranges_los
 from uwb_sim.simulation.trajectory import generate_lawnmower
 
@@ -17,6 +18,7 @@ class SimulationResult:
     est_positions: np.ndarray    # (T,2)
     errors_m: np.ndarray         # (T,)
     metrics: AccuracyMetrics
+    timing: dict | None = None   # profiling info (optional)
 
 
 def run_single_simulation(
@@ -27,6 +29,7 @@ def run_single_simulation(
     meas_cfg: dict,
     est_cfg: dict,
     seed: Optional[int] = None,
+    profile: bool = False,
 ) -> SimulationResult:
     dt = float(sim_time["dt"])
     steps = int(sim_time["steps"])
@@ -50,8 +53,14 @@ def run_single_simulation(
     # Estimation per time step
     est_pos = np.zeros_like(true_pos)
     x_prev = None
+    timer = Timer()
+    step_stats = TimerStats()
+
     for t in range(steps):
         r = ranges[t]
+        if profile:
+            timer.start()
+
         res = wls_gauss_newton_2d(
             anchors=anchors,
             ranges=r,
@@ -60,8 +69,13 @@ def run_single_simulation(
             max_iterations=int(est_cfg.get("max_iterations", 20)),
             tol=float(est_cfg.get("tol", 1e-6)),
         )
+
+        if profile:
+            step_stats.add(timer.stop())
+
         est_pos[t] = res.position
-        x_prev = res.position  # warm-start
+        x_prev = res.position
+
 
     errors = compute_position_errors(true_pos, est_pos)
     metrics = summarize_errors(errors)
@@ -142,4 +156,20 @@ def run_monte_carlo(
         "p95_std_m": float(p95.std(ddof=1)) if trials >= 2 else 0.0,
     }
 
-    return summary_dict, per_trial_rows
+    timing = None
+    if profile:
+        timing = {
+            "wls_step_mean_s": step_stats.mean_s,
+            "wls_step_min_s": step_stats.min_s if step_stats.n > 0 else 0.0,
+            "wls_step_max_s": step_stats.max_s if step_stats.n > 0 else 0.0,
+            "wls_steps_measured": step_stats.n,
+            "wls_total_s": step_stats.total_s,
+        }
+
+    return SimulationResult(
+        true_positions=true_pos,
+        est_positions=est_pos,
+        errors_m=errors,
+        metrics=metrics,
+        timing=timing,
+    )
