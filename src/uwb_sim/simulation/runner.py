@@ -67,3 +67,79 @@ def run_single_simulation(
     metrics = summarize_errors(errors)
 
     return SimulationResult(true_positions=true_pos, est_positions=est_pos, errors_m=errors, metrics=metrics)
+
+def run_monte_carlo(
+    area: dict,
+    sim_time: dict,
+    traj_cfg: dict,
+    anchors: np.ndarray,
+    meas_cfg: dict,
+    est_cfg: dict,
+    base_seed: int,
+    trials: int,
+) -> tuple[dict, list[dict]]:
+    """
+    Run K Monte Carlo trials by varying seed = base_seed + k.
+
+    Returns:
+      summary_dict: aggregated statistics
+      per_trial_rows: list of each-trial metrics rows
+    """
+    if trials < 1:
+        raise ValueError("trials must be >= 1")
+
+    rmse_list = []
+    mae_list = []
+    p95_list = []
+
+    per_trial_rows: list[dict] = []
+
+    for k in range(trials):
+        seed = base_seed + k
+        res = run_single_simulation(
+            area=area,
+            sim_time=sim_time,
+            traj_cfg=traj_cfg,
+            anchors=anchors,
+            meas_cfg=meas_cfg,
+            est_cfg=est_cfg,
+            seed=seed,
+        )
+
+        row = {
+            "trial": k,
+            "seed": seed,
+            "rmse_m": res.metrics.rmse_m,
+            "mae_m": res.metrics.mae_m,
+            "p95_m": res.metrics.p95_m,
+            "anchors": int(anchors.shape[0]),
+            "dt": float(sim_time["dt"]),
+            "steps": int(sim_time["steps"]),
+            "range_noise_sigma_m": float(meas_cfg["range_noise_sigma_m"]),
+        }
+        per_trial_rows.append(row)
+
+        rmse_list.append(res.metrics.rmse_m)
+        mae_list.append(res.metrics.mae_m)
+        p95_list.append(res.metrics.p95_m)
+
+    rmse = np.array(rmse_list, dtype=float)
+    mae = np.array(mae_list, dtype=float)
+    p95 = np.array(p95_list, dtype=float)
+
+    summary_dict = {
+        "trials": trials,
+        "base_seed": int(base_seed),
+        "anchors": int(anchors.shape[0]),
+        "dt": float(sim_time["dt"]),
+        "steps": int(sim_time["steps"]),
+        "range_noise_sigma_m": float(meas_cfg["range_noise_sigma_m"]),
+        "rmse_mean_m": float(rmse.mean()),
+        "rmse_std_m": float(rmse.std(ddof=1)) if trials >= 2 else 0.0,
+        "mae_mean_m": float(mae.mean()),
+        "mae_std_m": float(mae.std(ddof=1)) if trials >= 2 else 0.0,
+        "p95_mean_m": float(p95.mean()),
+        "p95_std_m": float(p95.std(ddof=1)) if trials >= 2 else 0.0,
+    }
+
+    return summary_dict, per_trial_rows
