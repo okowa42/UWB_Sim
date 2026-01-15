@@ -1,0 +1,42 @@
+simulation:
+  dimension: 2
+  area:
+    xmin: 0.0
+    xmax: 100.0
+    ymin: 0.0
+    ymax: 100.0
+
+  time:
+    dt: 0.5
+    steps: 200
+
+trajectory:
+  type: "lawnmower"   # lawnmower / circle / random_walk など（後で増やす）
+  speed_mps: 1.0
+
+anchors:
+  # UIで変更する前提の初期値
+  pattern: "corners"  # corners / perimeter / grid / circle / random
+  count: 4
+  margin_m: 5.0       # エリア端からの距離（corners/perimeter等で使用）
+  radius_m: 40.0      # circle配置で使用（中心はエリア中心）
+  grid:
+    nx: 2
+    ny: 2
+  random:
+    seed: 42
+
+measurement:
+  # 外乱は未実装フェーズ：LOSのガウスノイズのみ
+  range_noise_sigma_m: 0.10
+
+estimation:
+  method: "wls"       # wls（必須）／後で ekf を追加
+  max_iterations: 20
+  tol: 1.0e-6
+
+ui:
+  show_anchor_labels: true
+  show_error_plot: true
+  show_trajectory_plot: true
+  live_update: true
