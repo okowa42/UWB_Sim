@@ -80,7 +80,24 @@ def run_single_simulation(
     errors = compute_position_errors(true_pos, est_pos)
     metrics = summarize_errors(errors)
 
-    return SimulationResult(true_positions=true_pos, est_positions=est_pos, errors_m=errors, metrics=metrics)
+    timing = None
+    if profile:
+        timing = {
+            "wls_step_mean_s": step_stats.mean_s,
+            "wls_step_min_s": step_stats.min_s if step_stats.n > 0 else 0.0,
+            "wls_step_max_s": step_stats.max_s if step_stats.n > 0 else 0.0,
+            "wls_steps_measured": step_stats.n,
+            "wls_total_s": step_stats.total_s,
+        }
+
+    return SimulationResult(
+        true_positions=true_pos,
+        est_positions=est_pos,
+        errors_m=errors,
+        metrics=metrics,
+        timing=timing,
+    )
+
 
 def run_monte_carlo(
     area: dict,
@@ -156,20 +173,4 @@ def run_monte_carlo(
         "p95_std_m": float(p95.std(ddof=1)) if trials >= 2 else 0.0,
     }
 
-    timing = None
-    if profile:
-        timing = {
-            "wls_step_mean_s": step_stats.mean_s,
-            "wls_step_min_s": step_stats.min_s if step_stats.n > 0 else 0.0,
-            "wls_step_max_s": step_stats.max_s if step_stats.n > 0 else 0.0,
-            "wls_steps_measured": step_stats.n,
-            "wls_total_s": step_stats.total_s,
-        }
-
-    return SimulationResult(
-        true_positions=true_pos,
-        est_positions=est_pos,
-        errors_m=errors,
-        metrics=metrics,
-        timing=timing,
-    )
+    return summary_dict, per_trial_rows
